@@ -14,19 +14,21 @@ package org.openhab.binding.flicbutton.internal.discovery;
 
 import java.io.IOException;
 
-import org.eclipse.jdt.annotation.NonNull;
+import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.flicbutton.FlicButtonBindingConstants;
+import org.openhab.binding.flicbutton.handler.FlicDaemonBridgeHandler;
 import org.openhab.binding.flicbutton.internal.FlicButtonHandlerFactory;
 import org.openhab.binding.flicbutton.internal.util.FlicButtonUtils;
 import org.openhab.core.config.discovery.AbstractDiscoveryService;
 import org.openhab.core.config.discovery.DiscoveryResult;
 import org.openhab.core.config.discovery.DiscoveryResultBuilder;
 import org.openhab.core.thing.ThingUID;
+import org.openhab.core.thing.binding.ThingHandler;
+import org.openhab.core.thing.binding.ThingHandlerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.flic.fliclib.javaclient.Bdaddr;
-import io.flic.fliclib.javaclient.FlicClient;
 import io.flic.fliclib.javaclient.GeneralCallbacks;
 import io.flic.fliclib.javaclient.GetInfoResponseCallback;
 import io.flic.fliclib.javaclient.enums.BdAddrType;
@@ -45,23 +47,32 @@ import io.flic.fliclib.javaclient.enums.BluetoothControllerState;
  * @author Patrick Fink - Initial contribution
  */
 public class FlicSimpleclientDiscoveryServiceImpl extends AbstractDiscoveryService
-        implements FlicButtonDiscoveryService {
+        implements FlicButtonDiscoveryService, ThingHandlerService {
     private final Logger logger = LoggerFactory.getLogger(FlicSimpleclientDiscoveryServiceImpl.class);
 
     private boolean activated = false;
-    private ThingUID bridgeUID;
-    private FlicClient flicClient;
+    private FlicDaemonBridgeHandler bridgeHandler;
 
-    public FlicSimpleclientDiscoveryServiceImpl(@NonNull ThingUID bridgeUID) {
+    public FlicSimpleclientDiscoveryServiceImpl() {
         super(FlicButtonBindingConstants.SUPPORTED_THING_TYPES_UIDS, 2, true);
-        this.bridgeUID = bridgeUID;
     }
 
     @Override
-    public void activate(@NonNull FlicClient flicClient) {
-        this.flicClient = flicClient;
+    public void activate() {
         activated = true;
         super.activate(null);
+    }
+
+    @Override
+    public void setThingHandler(ThingHandler handler) {
+        if (handler instanceof FlicDaemonBridgeHandler) {
+            bridgeHandler = (FlicDaemonBridgeHandler) handler;
+        }
+    }
+
+    @Override
+    public @Nullable ThingHandler getThingHandler() {
+        return bridgeHandler;
     }
 
     @Override
@@ -87,7 +98,7 @@ public class FlicSimpleclientDiscoveryServiceImpl extends AbstractDiscoveryServi
 
     protected void discoverVerifiedButtons() throws IOException {
         // Register FlicButtonEventListener to all already existing Flic buttons
-        flicClient.getInfo(new GetInfoResponseCallback() {
+        bridgeHandler.getFlicClient().getInfo(new GetInfoResponseCallback() {
             @Override
             public void onGetInfoResponse(BluetoothControllerState bluetoothControllerState, Bdaddr myBdAddr,
                     BdAddrType myBdAddrType, int maxPendingConnections, int maxConcurrentlyConnectedButtons,
@@ -104,7 +115,9 @@ public class FlicSimpleclientDiscoveryServiceImpl extends AbstractDiscoveryServi
     @Override
     protected void startBackgroundDiscovery() {
         super.startBackgroundDiscovery();
-        flicClient.setGeneralCallbacks(new GeneralCallbacks() {
+        // logger.info(bridgeHandler.toString());
+        // logger.info(bridgeHandler.getFlicClient().toString());
+        bridgeHandler.getFlicClient().setGeneralCallbacks(new GeneralCallbacks() {
             @Override
             public void onNewVerifiedButton(Bdaddr bdaddr) throws IOException {
                 logger.info("A new Flic button was added by an external flicd client: {}", bdaddr);
@@ -116,17 +129,18 @@ public class FlicSimpleclientDiscoveryServiceImpl extends AbstractDiscoveryServi
     @Override
     protected void stopBackgroundDiscovery() {
         super.stopBackgroundDiscovery();
-        if (flicClient != null) {
-            flicClient.setGeneralCallbacks(null);
+        if (bridgeHandler.getFlicClient() != null) {
+            bridgeHandler.getFlicClient().setGeneralCallbacks(null);
         }
     }
 
     @Override
     public ThingUID flicButtonDiscovered(Bdaddr bdaddr) {
         logger.info("Flic Button {} discovered!", bdaddr);
-        ThingUID flicButtonUID = FlicButtonUtils.getThingUIDFromBdAddr(bdaddr, bridgeUID);
+        ThingUID flicButtonUID = FlicButtonUtils.getThingUIDFromBdAddr(bdaddr, bridgeHandler.getThing().getUID());
 
-        DiscoveryResult discoveryResult = DiscoveryResultBuilder.create(flicButtonUID).withBridge(bridgeUID)
+        DiscoveryResult discoveryResult = DiscoveryResultBuilder.create(flicButtonUID)
+                .withBridge(bridgeHandler.getThing().getUID())
                 .withLabel("Flic Button " + bdaddr.toString().replace(":", ""))
                 .withProperty(FlicButtonBindingConstants.CONFIG_ADDRESS, bdaddr.toString())
                 .withRepresentationProperty(FlicButtonBindingConstants.CONFIG_ADDRESS).build();

@@ -12,28 +12,19 @@
  */
 package org.openhab.binding.flicbutton.internal;
 
-import java.util.HashMap;
-import java.util.Hashtable;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.flicbutton.FlicButtonBindingConstants;
 import org.openhab.binding.flicbutton.handler.FlicButtonHandler;
 import org.openhab.binding.flicbutton.handler.FlicDaemonBridgeHandler;
-import org.openhab.binding.flicbutton.internal.discovery.FlicButtonDiscoveryService;
-import org.openhab.binding.flicbutton.internal.discovery.FlicSimpleclientDiscoveryServiceImpl;
-import org.openhab.core.config.discovery.DiscoveryService;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingTypeUID;
-import org.openhab.core.thing.ThingUID;
 import org.openhab.core.thing.binding.BaseThingHandlerFactory;
 import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.thing.binding.ThingHandlerFactory;
-import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.component.annotations.Component;
 
 /**
@@ -49,7 +40,6 @@ public class FlicButtonHandlerFactory extends BaseThingHandlerFactory {
             .concat(FlicButtonBindingConstants.BRIDGE_THING_TYPES_UIDS.stream(),
                     FlicButtonBindingConstants.SUPPORTED_THING_TYPES_UIDS.stream())
             .collect(Collectors.toSet());
-    private final Map<ThingUID, @Nullable ServiceRegistration<?>> discoveryServiceRegs = new HashMap<>();
 
     @Override
     public boolean supportsThingType(ThingTypeUID thingTypeUID) {
@@ -64,40 +54,10 @@ public class FlicButtonHandlerFactory extends BaseThingHandlerFactory {
         if (thingTypeUID.equals(FlicButtonBindingConstants.FLICBUTTON_THING_TYPE)) {
             return new FlicButtonHandler(thing);
         } else if (thingTypeUID.equals(FlicButtonBindingConstants.BRIDGE_THING_TYPE)) {
-            FlicButtonDiscoveryService discoveryService = new FlicSimpleclientDiscoveryServiceImpl(thing.getUID());
-            FlicDaemonBridgeHandler bridgeHandler = new FlicDaemonBridgeHandler((Bridge) thing, discoveryService);
-            registerDiscoveryService(discoveryService, thing.getUID());
-
+            FlicDaemonBridgeHandler bridgeHandler = new FlicDaemonBridgeHandler((Bridge) thing);
             return bridgeHandler;
         }
 
         return null;
-    }
-
-    @Override
-    protected synchronized void removeHandler(ThingHandler thingHandler) {
-        if (thingHandler instanceof FlicDaemonBridgeHandler) {
-            unregisterDiscoveryService(thingHandler.getThing().getUID());
-        }
-        super.removeHandler(thingHandler);
-    }
-
-    private synchronized void registerDiscoveryService(FlicButtonDiscoveryService discoveryService,
-            ThingUID bridgeUID) {
-        this.discoveryServiceRegs.put(bridgeUID, getBundleContext().registerService(DiscoveryService.class.getName(),
-                discoveryService, new Hashtable<String, Object>()));
-    }
-
-    private synchronized void unregisterDiscoveryService(ThingUID bridgeUID) {
-        ServiceRegistration<?> serviceReg = this.discoveryServiceRegs.get(bridgeUID);
-        if (serviceReg != null) {
-            FlicButtonDiscoveryService service = (FlicButtonDiscoveryService) getBundleContext()
-                    .getService(serviceReg.getReference());
-            if (service != null) {
-                service.deactivate();
-            }
-            serviceReg.unregister();
-            discoveryServiceRegs.remove(bridgeUID);
-        }
     }
 }

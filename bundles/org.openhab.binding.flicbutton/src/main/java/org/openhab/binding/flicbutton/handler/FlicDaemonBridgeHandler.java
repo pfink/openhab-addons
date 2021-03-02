@@ -16,16 +16,18 @@ import java.io.IOException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import org.openhab.binding.flicbutton.FlicButtonBindingConstants;
-import org.openhab.binding.flicbutton.internal.discovery.FlicButtonDiscoveryService;
+import org.openhab.binding.flicbutton.internal.discovery.FlicSimpleclientDiscoveryServiceImpl;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.binding.BaseBridgeHandler;
+import org.openhab.core.thing.binding.ThingHandlerService;
 import org.openhab.core.types.Command;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,15 +45,13 @@ public class FlicDaemonBridgeHandler extends BaseBridgeHandler {
     // Config parameters
     private FlicDaemonBridgeConfiguration cfg;
     // Services
-    private FlicButtonDiscoveryService buttonDiscoveryService;
     private Future<?> flicClientFuture;
     // For disposal
     private Collection<Future<?>> startedTasks = new ArrayList<>(2);
     private FlicClient flicClient;
 
-    public FlicDaemonBridgeHandler(Bridge bridge, FlicButtonDiscoveryService buttonDiscoveryService) {
+    public FlicDaemonBridgeHandler(Bridge bridge) {
         super(bridge);
-        this.buttonDiscoveryService = buttonDiscoveryService;
     }
 
     public FlicClient getFlicClient() {
@@ -59,11 +59,15 @@ public class FlicDaemonBridgeHandler extends BaseBridgeHandler {
     }
 
     @Override
+    public Collection<Class<? extends ThingHandlerService>> getServices() {
+        return Collections.singleton(FlicSimpleclientDiscoveryServiceImpl.class);
+    }
+
+    @Override
     public void initialize() {
         try {
             initConfigParameters();
             startFlicdClientAsync();
-            activateButtonDiscoveryService();
             initThingStatus();
         } catch (UnknownHostException ignored) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Hostname wrong or unknown!");
@@ -80,10 +84,6 @@ public class FlicDaemonBridgeHandler extends BaseBridgeHandler {
         Object hostConfigRaw = thing.getConfiguration().get(FlicButtonBindingConstants.CONFIG_HOST_NAME);
         Object portConfigRaw = thing.getConfiguration().get(FlicButtonBindingConstants.CONFIG_PORT);
         cfg = new FlicDaemonBridgeConfiguration(hostConfigRaw, portConfigRaw);
-    }
-
-    private void activateButtonDiscoveryService() {
-        buttonDiscoveryService.activate(flicClient);
     }
 
     private void startFlicdClientAsync() throws IOException {
@@ -126,7 +126,6 @@ public class FlicDaemonBridgeHandler extends BaseBridgeHandler {
             startedTask.cancel(true);
         }
         startedTasks = new ArrayList<>(2);
-        buttonDiscoveryService.deactivate();
     }
 
     private void scheduleReinitialize() {
